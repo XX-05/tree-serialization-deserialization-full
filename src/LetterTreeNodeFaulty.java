@@ -1,17 +1,13 @@
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 
-class DeserializationException extends Exception {
-    public DeserializationException(String msg) {
+class MalormedSerialBinaryException extends Exception {
+    public MalormedSerialBinaryException(String msg) {
         super(msg);
     }
 }
@@ -215,12 +211,12 @@ public class LetterTreeNodeFaulty {
         return flattened;
     }
 
-    public static LetterTreeNodeFaulty deserializeFile(FileInputStream file) throws DeserializationException, IOException {
+    public static LetterTreeNodeFaulty deserializeFile(FileInputStream file) throws MalormedSerialBinaryException, IOException {
         Stack<Pair<LetterTreeNodeFaulty, Integer>> stack = new Stack<>();
         ArrayList<Pair<LetterTreeNodeFaulty, Integer>> flattened = deserializeBinFileFlattened(file);
 
         if (flattened.isEmpty()) {
-            throw new DeserializationException("No data or improperly formatted data!");
+            throw new MalormedSerialBinaryException("No data or improperly formatted data!");
         }
 
         LetterTreeNodeFaulty rootNode = flattened.get(0).getFirst();
@@ -249,7 +245,7 @@ public class LetterTreeNodeFaulty {
         return rootNode;
     }
 
-    public static void main(String[] args) throws IOException, DeserializationException {
+    public static void main(String[] args) throws IOException, MalormedSerialBinaryException {
 //        LetterTreeNodeFaulty tree = RandomAlphabetTreeGenerator.generateRandomAlphabetTree();
 //
 //        byte[] serializedNodeBytes = tree.serializeNodeData(tree);

@@ -10,10 +10,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
 
-final class SerializationCODEC {
+final class SerializationCodec {
     final static int END_WORD_RANGE_START = 0xF0;
-    final static int END_WORD_1B = END_WORD_RANGE_START + 1;
-    final static int END_WORD_2B = END_WORD_RANGE_START + 2;
 }
 
 class Pair<A, B> {
@@ -195,50 +193,20 @@ public class NGramTreeNode {
 
     static byte[] encodeNode(NGramTreeNode node) {
         int nChildren = node.children.size() % LetterTreeNodeFaulty.SerializationCODEC.MAX_CHILDREN;
+        int nChildrenBytes = Math.max((int) Math.ceil(Math.log(nChildren + 1) / Math.log(2) / 8.0), 1);
         byte[] wordBytes = node.word.getBytes(StandardCharsets.US_ASCII);
 
-        byte[] encoded;
-        if (nChildren <= 0xFF) {
-            encoded = new byte[wordBytes.length + 2];
+        byte[] encoded = new byte[wordBytes.length + nChildrenBytes + 1];
+        System.arraycopy(wordBytes, 0, encoded, 0, wordBytes.length);
 
-            System.arraycopy(wordBytes, 0, encoded, 0, wordBytes.length);
-            encoded[encoded.length - 2] = (byte) SerializationCODEC.END_WORD_1B;
-        } else {
-            encoded = new byte[wordBytes.length + 3];
+        encoded[wordBytes.length] = (byte) (SerializationCodec.END_WORD_RANGE_START + nChildrenBytes);
 
-            System.arraycopy(wordBytes, 0, encoded, 0, wordBytes.length);
-            encoded[encoded.length - 3] = (byte) SerializationCODEC.END_WORD_2B;
-            encoded[encoded.length - 2] = (byte) (nChildren >> 8);
+        for (int i = 0; i < nChildrenBytes; i ++) {
+            encoded[encoded.length - i - 1] = (byte) (nChildren & 0xff);
+            nChildren = nChildren >> 8;
         }
-
-        encoded[encoded.length - 1] = (byte) (nChildren & 0xff);
 
         return encoded;
-    }
-
-    static Pair<NGramTreeNode, Integer> decodeNode(byte[] encodedNode) throws DeserializationException {
-        ArrayList<Byte> buff = new ArrayList<>();
-        NGramTreeNode node;
-        int idx = 0;
-        while (idx < encodedNode.length)  {
-            int currByte = encodedNode[idx] & 0xFF;
-            if (currByte > SerializationCODEC.END_WORD_RANGE_START) {
-                int nChildren = 0;
-                for (int i = 0; i < currByte - SerializationCODEC.END_WORD_RANGE_START; i ++) {
-                    idx ++;
-                    nChildren = (nChildren & 0xFF) << 8 | (encodedNode[idx] & 0xFF);
-                }
-                String word = parseBuffToString(buff);
-                buff.clear();
-
-                node = new NGramTreeNode(word);
-                return new Pair<>(node, nChildren);
-            } else {
-                buff.add((byte) currByte);
-            }
-            idx ++;
-        }
-        throw new DeserializationException("Could not parse node encoding");
     }
 
     public void serializeBinary(OutputStream fw) throws IOException {
@@ -316,7 +284,15 @@ public class NGramTreeNode {
         return word.toString();
     }
 
-    public static NGramTreeNode deserializeBinary(InputStream fr) throws IOException, DeserializationException {
+    private static int parseNChildren(InputStream fr, int nBytes) throws IOException {
+        int nChildren = 0;
+        for (int i = 0; i < nBytes - SerializationCodec.END_WORD_RANGE_START; i++) {
+            nChildren = (nChildren & 0xFF) << 8 | (fr.read() & 0xFF);
+        }
+        return nChildren;
+    }
+
+    public static NGramTreeNode deserializeBinary(InputStream fr) throws IOException, MalormedSerialBinaryException {
         NGramTreeNode rootNode = null;
         Stack<Pair<NGramTreeNode, Integer>> stack = new Stack<>();
 
@@ -324,12 +300,8 @@ public class NGramTreeNode {
 
         int currByte;
         while ((currByte = fr.read()) != -1) {
-            if (currByte > SerializationCODEC.END_WORD_RANGE_START) {
-                int nChildren = 0;
-                for (int i = 0; i < currByte - SerializationCODEC.END_WORD_RANGE_START; i ++) {
-                    nChildren = (nChildren & 0xFF) << 8 | (fr.read() & 0xFF);
-                }
-
+            if (currByte > SerializationCodec.END_WORD_RANGE_START) {
+                int nChildren = parseNChildren(fr, currByte);
                 String word = parseBuffToString(buff);
                 buff.clear();
 
@@ -343,13 +315,14 @@ public class NGramTreeNode {
                 }
 
                 cascadeDeflateStack(stack, newNodeData);
-            } else {
-                buff.add((byte) currByte);
+                continue;
             }
+
+            buff.add((byte) currByte);
         }
 
         if (rootNode == null) {
-            throw new DeserializationException("Could not parse any nodes from the given data!");
+            throw new MalormedSerialBinaryException("Could not parse any nodes from the given data!");
         }
 
         return rootNode;
