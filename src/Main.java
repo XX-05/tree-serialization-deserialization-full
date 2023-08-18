@@ -19,7 +19,7 @@ public class Main {
         while (true) {
             NGramTreeNode randomTree = RandomTreeGenerator.generateRandomTree(10, 6, 10);
             NGramTreeNode deserializedRandomTree = NGramTreeNode.deserialize(randomTree.serialize());
-            System.out.println(randomTree.countChildren());
+            System.out.println(randomTree.branchSize());
 
             if (!deserializedRandomTree.deepEquals(randomTree)) {
 //                System.out.println(randomTree.serialize());

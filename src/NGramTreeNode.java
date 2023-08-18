@@ -1,14 +1,19 @@
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Stack;
 
 final class SerializationCODEC {
-    final static int END_WORD_1B = 0xFD;
-    final static int END_WORD_2B = 0xFE;
-    final static int MAX_CHILDREN = 0xFFFF;
+    final static int END_WORD_RANGE_START = 0xF0;
+    final static int END_WORD_1B = END_WORD_RANGE_START + 1;
+    final static int END_WORD_2B = END_WORD_RANGE_START + 2;
 }
 
 class Pair<A, B> {
@@ -93,11 +98,11 @@ public class NGramTreeNode {
 
     /**
      * Returns a deep count of how many nodes are in the tree
-     * branching off of this node.
+     * branching off of this node (including this node).
      *
      * @return The total number of nodes attached to this node.
      */
-    public int countChildren() {
+    public int branchSize() {
         Stack<NGramTreeNode> stack = new Stack<>();
         stack.add(this);
 
@@ -192,11 +197,20 @@ public class NGramTreeNode {
         int nChildren = node.children.size() % LetterTreeNodeFaulty.SerializationCODEC.MAX_CHILDREN;
         byte[] wordBytes = node.word.getBytes(StandardCharsets.US_ASCII);
 
-        byte[] encoded = new byte[wordBytes.length + 3];
+        byte[] encoded;
+        if (nChildren <= 0xFF) {
+            encoded = new byte[wordBytes.length + 2];
 
-        System.arraycopy(wordBytes, 0, encoded, 0, wordBytes.length);
-        encoded[encoded.length - 3] = (byte) SerializationCODEC.END_WORD_2B;
-        encoded[encoded.length - 2] = (byte) (nChildren >> 8);
+            System.arraycopy(wordBytes, 0, encoded, 0, wordBytes.length);
+            encoded[encoded.length - 2] = (byte) SerializationCODEC.END_WORD_1B;
+        } else {
+            encoded = new byte[wordBytes.length + 3];
+
+            System.arraycopy(wordBytes, 0, encoded, 0, wordBytes.length);
+            encoded[encoded.length - 3] = (byte) SerializationCODEC.END_WORD_2B;
+            encoded[encoded.length - 2] = (byte) (nChildren >> 8);
+        }
+
         encoded[encoded.length - 1] = (byte) (nChildren & 0xff);
 
         return encoded;
@@ -207,22 +221,20 @@ public class NGramTreeNode {
         NGramTreeNode node;
         int idx = 0;
         while (idx < encodedNode.length)  {
-            byte currByte = encodedNode[idx];
-            switch (currByte) {
-                case (byte) SerializationCODEC.END_WORD_1B -> {
+            int currByte = encodedNode[idx] & 0xFF;
+            if (currByte > SerializationCODEC.END_WORD_RANGE_START) {
+                int nChildren = 0;
+                for (int i = 0; i < currByte - SerializationCODEC.END_WORD_RANGE_START; i ++) {
+                    idx ++;
+                    nChildren = (nChildren & 0xFF) << 8 | (encodedNode[idx] & 0xFF);
+                }
+                String word = parseBuffToString(buff);
+                buff.clear();
 
-                }
-                case (byte) SerializationCODEC.END_WORD_2B -> {
-                    int nChildren = (encodedNode[idx + 1] & 0xFF) << 8 | (encodedNode[idx + 2] & 0xFF);
-                    String word = parseBuffToString(buff);
-                    buff.clear();
-
-                    node = new NGramTreeNode(word);
-                    return new Pair<>(node, nChildren);
-                }
-                default -> {
-                    buff.add((byte) currByte);
-                }
+                node = new NGramTreeNode(word);
+                return new Pair<>(node, nChildren);
+            } else {
+                buff.add((byte) currByte);
             }
             idx ++;
         }
@@ -312,35 +324,32 @@ public class NGramTreeNode {
 
         int currByte;
         while ((currByte = fr.read()) != -1) {
-            switch (currByte) {
-                case SerializationCODEC.END_WORD_1B -> {
-                    // to be implemented
-                    System.out.println(currByte);
+            if (currByte > SerializationCODEC.END_WORD_RANGE_START) {
+                int nChildren = 0;
+                for (int i = 0; i < currByte - SerializationCODEC.END_WORD_RANGE_START; i ++) {
+                    nChildren = (nChildren & 0xFF) << 8 | (fr.read() & 0xFF);
                 }
-                case SerializationCODEC.END_WORD_2B -> {
-                    int nChildren = (fr.read() & 0xFF) << 8 | (fr.read() & 0xFF);
-                    String word = parseBuffToString(buff);
-                    buff.clear();
 
-                    NGramTreeNode node = new NGramTreeNode(word);
-                    Pair<NGramTreeNode, Integer> newNodeData = new Pair<>(node, nChildren);
+                String word = parseBuffToString(buff);
+                buff.clear();
 
-                    if (rootNode == null) {
-                        rootNode = node;
-                        stack.add(newNodeData);
-                        continue;
-                    }
+                NGramTreeNode node = new NGramTreeNode(word);
+                Pair<NGramTreeNode, Integer> newNodeData = new Pair<>(node, nChildren);
 
-                    cascadeDeflateStack(stack, newNodeData);
+                if (rootNode == null) {
+                    rootNode = node;
+                    stack.add(newNodeData);
+                    continue;
                 }
-                default -> {
-                    buff.add((byte) currByte);
-                }
+
+                cascadeDeflateStack(stack, newNodeData);
+            } else {
+                buff.add((byte) currByte);
             }
         }
 
         if (rootNode == null) {
-            throw new DeserializationException("Could not parse any nodes from serial!");
+            throw new DeserializationException("Could not parse any nodes from the given data!");
         }
 
         return rootNode;
@@ -353,9 +362,7 @@ public class NGramTreeNode {
 
                 for (int i = 0; i < tokens.length - nGramLength + 1; i += nGramLength) {
                     String[] ngram = new String[nGramLength];
-                    for (int j = 0; j < nGramLength; j ++) {
-                        ngram[j] = tokens[i + j];
-                    }
+                    System.arraycopy(tokens, i, ngram, 0, nGramLength);
                     addNGram(ngram);
                 }
             }

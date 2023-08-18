@@ -67,8 +67,10 @@ public class TestNGramTreeNodeSingleNodeDecoding {
             deserialized = NGramTreeNode.deserializeBinary(fr);
         }
 
-        assert deserialized.countChildren() == root.countChildren();
+        assert deserialized.branchSize() == root.branchSize();
         assert root.deepEquals(deserialized);
+
+        System.out.println(Arrays.toString(deserialized.predictNextWord("hi my name is".split(" "))));
     }
     public static void main(String[] args) throws IOException, DeserializationException {
         String serialized = Main.readFile("serialized.ngrams");
@@ -76,7 +78,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
 
         System.out.println(Arrays.toString(root.predictNextWord("hi my name is".split(" "))));
 
-        System.out.println(root.countChildren());
+        System.out.println(root.branchSize());
         testBinaryEncodeDecode(root);
         testBinarySerializationDeserialization(root);
     }
