@@ -15,18 +15,4 @@ public class Main {
 
         return stringBuilder.toString();
     }
-    public static void main(String[] args){
-        while (true) {
-            NGramTreeNode randomTree = RandomTreeGenerator.generateRandomTree(10, 6, 10);
-            NGramTreeNode deserializedRandomTree = NGramTreeNode.deserialize(randomTree.serialize());
-            System.out.println(randomTree.branchSize());
-
-            if (!deserializedRandomTree.deepEquals(randomTree)) {
-//                System.out.println(randomTree.serialize());
-//                System.out.println(deserializedRandomTree.serialize());
-
-                break;
-            }
-        }
-    }
 }

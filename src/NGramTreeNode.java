@@ -1,14 +1,13 @@
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
+
+
+class MalformedSerialBinaryException extends Exception {
+    public MalformedSerialBinaryException(String msg) {
+        super(msg);
+    }
+}
 
 final class SerializationCodec {
     final static int END_WORD_RANGE_START = 0xF0;
@@ -173,175 +172,5 @@ public class NGramTreeNode {
         }
 
         return node.children.keySet().toArray(new String[0]);
-    }
-
-    public String serialize() {
-        StringBuilder flattened = new StringBuilder();
-        Stack<NGramTreeNode> stack = new Stack<>();
-
-        stack.add(this);
-
-        while (!stack.isEmpty()) {
-            NGramTreeNode node = stack.pop();
-            String nodeInfo = node.word + "|" + node.children.size() + "]";
-            flattened.append(nodeInfo);
-            stack.addAll(node.children.values());
-        }
-
-        return flattened.toString();
-    }
-
-    static byte[] encodeNode(NGramTreeNode node) {
-        int nChildren = node.children.size() % LetterTreeNodeFaulty.SerializationCODEC.MAX_CHILDREN;
-        int nChildrenBytes = Math.max((int) Math.ceil(Math.log(nChildren + 1) / Math.log(2) / 8.0), 1);
-        byte[] wordBytes = node.word.getBytes(StandardCharsets.US_ASCII);
-
-        byte[] encoded = new byte[wordBytes.length + nChildrenBytes + 1];
-        System.arraycopy(wordBytes, 0, encoded, 0, wordBytes.length);
-
-        encoded[wordBytes.length] = (byte) (SerializationCodec.END_WORD_RANGE_START + nChildrenBytes);
-
-        for (int i = 0; i < nChildrenBytes; i ++) {
-            encoded[encoded.length - i - 1] = (byte) (nChildren & 0xff);
-            nChildren = nChildren >> 8;
-        }
-
-        return encoded;
-    }
-
-    public void serializeBinary(OutputStream fw) throws IOException {
-        Stack<NGramTreeNode> stack = new Stack<>();
-        stack.add(this);
-
-        while (!stack.isEmpty()) {
-            NGramTreeNode node = stack.pop();
-            fw.write(encodeNode(node));
-            stack.addAll(node.children.values());
-        }
-    }
-
-    static void cascadeDeflateStack(Stack<Pair<NGramTreeNode, Integer>> stack, Pair<NGramTreeNode, Integer> newNodeData) {
-        Pair<NGramTreeNode, Integer> parentData = stack.pop();
-        parentData.getFirst().addChild(newNodeData.getFirst());
-        parentData.setSecond(parentData.getSecond() - 1);
-
-        stack.add(parentData);
-        stack.add(newNodeData);
-
-        for (int j = stack.size() - 1; j > 0; j--) {
-            Pair<NGramTreeNode, Integer> n = stack.get(j);
-            if (n.getSecond() > 0) {
-                break;
-            }
-            stack.pop();
-        }
-    }
-
-    public static NGramTreeNode deserialize(String serializedData) {
-        Stack<Pair<NGramTreeNode, Integer>> stack = new Stack<>();
-
-        NGramTreeNode rootNode = null;
-
-        StringBuilder buff = new StringBuilder();
-        String letter = "";
-
-        for (int i = 0; i < serializedData.length(); i ++) {
-            String currChar = serializedData.substring(i, i + 1);
-
-            switch (currChar) {
-                case "]" -> {
-                    NGramTreeNode newNode = new NGramTreeNode(letter);
-                    int nChildren = Integer.parseInt(buff.toString());
-                    buff.setLength(0);
-                    letter = "";
-
-                    Pair<NGramTreeNode, Integer> newNodeData = new Pair<>(newNode, nChildren);
-
-                    if (rootNode == null) {
-                        rootNode = newNode;
-                        stack.add(newNodeData);
-                        continue;
-                    }
-
-                    cascadeDeflateStack(stack, newNodeData);
-                }
-                case "|" -> {
-                    letter = buff.toString();
-                    buff.setLength(0);
-                }
-                default -> buff.append(currChar);
-            }
-        }
-
-        return rootNode;
-    }
-
-    static String parseBuffToString(ArrayList<Byte> buff) {
-        StringBuilder word = new StringBuilder();
-        for (Byte b : buff) {
-            word.append((char) b.byteValue());
-        }
-        return word.toString();
-    }
-
-    private static int parseNChildren(InputStream fr, int nBytes) throws IOException {
-        int nChildren = 0;
-        for (int i = 0; i < nBytes - SerializationCodec.END_WORD_RANGE_START; i++) {
-            nChildren = (nChildren & 0xFF) << 8 | (fr.read() & 0xFF);
-        }
-        return nChildren;
-    }
-
-    public static NGramTreeNode deserializeBinary(InputStream fr) throws IOException, MalormedSerialBinaryException {
-        NGramTreeNode rootNode = null;
-        Stack<Pair<NGramTreeNode, Integer>> stack = new Stack<>();
-
-        ArrayList<Byte> buff = new ArrayList<>();
-
-        int currByte;
-        while ((currByte = fr.read()) != -1) {
-            if (currByte > SerializationCodec.END_WORD_RANGE_START) {
-                int nChildren = parseNChildren(fr, currByte);
-                String word = parseBuffToString(buff);
-                buff.clear();
-
-                NGramTreeNode node = new NGramTreeNode(word);
-                Pair<NGramTreeNode, Integer> newNodeData = new Pair<>(node, nChildren);
-
-                if (rootNode == null) {
-                    rootNode = node;
-                    stack.add(newNodeData);
-                    continue;
-                }
-
-                cascadeDeflateStack(stack, newNodeData);
-                continue;
-            }
-
-            buff.add((byte) currByte);
-        }
-
-        if (rootNode == null) {
-            throw new MalormedSerialBinaryException("Could not parse any nodes from the given data!");
-        }
-
-        return rootNode;
-    }
-
-    void addCorpus(String corpusDir, int nGramLength) {
-        try {
-            for (Path f: Files.walk(Paths.get(corpusDir)).filter(Files::isRegularFile).toList()) {
-                String[] tokens = Main.readFile(f.toString()).split(" ");
-
-                for (int i = 0; i < tokens.length - nGramLength + 1; i += nGramLength) {
-                    String[] ngram = new String[nGramLength];
-                    System.arraycopy(tokens, i, ngram, 0, nGramLength);
-                    addNGram(ngram);
-                }
-            }
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 }
