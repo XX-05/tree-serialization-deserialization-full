@@ -26,7 +26,7 @@ public class NGramTreeNodeFileHandler {
 
     static byte[] encodeNodeBinary(NGramTreeNode node) {
         int nChildren = node.getChildren().length;
-        int nChildrenBytes = Math.max((int) Math.ceil(Math.log(nChildren + 1) / Math.log(2) / 8.0), 1);
+        int nChildrenBytes = (int) Math.ceil(Math.log(nChildren + 1) / Math.log(2) / 8.0);
         byte[] wordBytes = node.getWord().getBytes(StandardCharsets.US_ASCII);
 
         byte[] encoded = new byte[wordBytes.length + nChildrenBytes + 1];
@@ -155,7 +155,7 @@ public class NGramTreeNodeFileHandler {
 
         int currByte;
         while ((currByte = fr.read()) != -1) {
-            if (currByte > SerializationCodec.END_WORD_RANGE_START) {
+            if (currByte >= SerializationCodec.END_WORD_RANGE_START) {
                 int nChildren = parseNChildren(fr, currByte);
                 String word = parseBuffToString(buff);
                 buff.clear();
