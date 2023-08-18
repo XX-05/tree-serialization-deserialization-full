@@ -7,11 +7,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Stack;
-import java.util.HashMap;
-import java.util.ArrayList;
+import java.util.*;
 
 
 class DeserializationException extends Exception {
@@ -193,10 +189,13 @@ public class LetterTreeNodeFaulty {
         byte[] buff = new byte[0];
         String word = "";
 
+        int processedNodes = 0;
+
         int currByte;
         while ((currByte = file.read()) != -1) {
             switch (currByte) {
                 case SerializationCODEC.ENDNODE -> {
+                    processedNodes ++;
                     LetterTreeNodeFaulty newNode = new LetterTreeNodeFaulty(word);
                     int nChildren = byteArrayToInt(buff);
                     flattened.add(new Pair<>(newNode, nChildren));
@@ -204,14 +203,14 @@ public class LetterTreeNodeFaulty {
                     word = "";
                 }
                 case SerializationCODEC.ENDWORD -> {
-                    word = new String(buff, StandardCharsets.US_ASCII);
+                    word = new String(Base64.getDecoder().decode(buff), StandardCharsets.US_ASCII);
                     buff = new byte[0];
                 }
                 default -> buff = concatByteArrays(buff, new byte[]{(byte)currByte});
             }
         }
 
-        System.out.println(flattened.size());
+        System.out.println(processedNodes);
 
         return flattened;
     }
@@ -229,7 +228,7 @@ public class LetterTreeNodeFaulty {
         flattened.remove(0);
 
         for (Pair<LetterTreeNodeFaulty, Integer> nodeData : flattened) {
-            System.out.println(stack.size());
+//            System.out.println(stack.size());
             Pair<LetterTreeNodeFaulty, Integer> parentData = stack.pop();
             parentData.getFirst().addChild(nodeData.getFirst());
             parentData.setSecond(parentData.getSecond() - 1);
@@ -244,7 +243,7 @@ public class LetterTreeNodeFaulty {
                 }
                 stack.pop();
             }
-            System.out.println(stack.size());
+//            System.out.println(stack.size());
         }
 
         return rootNode;
@@ -260,7 +259,7 @@ public class LetterTreeNodeFaulty {
 //        }
 
         LetterTreeNodeFaulty deserialized;
-        try (FileInputStream file = new FileInputStream("serialized.ngrams")) {
+        try (FileInputStream file = new FileInputStream("serialized.bin.ngrams")) {
             deserialized = LetterTreeNodeFaulty.deserializeFile(file);
         }
 
