@@ -8,19 +8,43 @@ import java.util.Stack;
 
 final class SerializationCodec {
     final static int END_WORD_RANGE_START = 0xF0;
+    final static int BACKREFERENCE = 0x80;
 }
 
 public class NGramTreeNodeFileHandler {
+
+    private static int rollingHash(String s, int power, int modulo) {
+        int hash = 0;
+        long p_pow = 1;
+        for (char c : s.toCharArray()) {
+            hash = (int) ((hash + (c - 'a' + 1) * p_pow) % modulo);
+            p_pow = (p_pow * power) % modulo;
+        }
+        return Math.abs(hash);
+    }
 
     public static String serialize(NGramTreeNode root) {
         StringBuilder flattened = new StringBuilder();
         Stack<NGramTreeNode> stack = new Stack<>();
 
+        String[] backreferences = new String[251];
+
         stack.add(root);
 
         while (!stack.isEmpty()) {
             NGramTreeNode node = stack.pop();
-            String nodeInfo = node.getWord() + "|" + node.getChildren().length + "]";
+            int nodeHash = rollingHash(node.getWord(), 31, 251) % 251;
+
+            String nodeInfo;
+            if (node.getWord().equals(backreferences[nodeHash])) {
+                nodeInfo = "}" + nodeHash;
+            } else {
+                backreferences[nodeHash] = node.getWord();
+                nodeInfo = node.getWord();
+            }
+
+            nodeInfo += "|" + node.getChildren().length + "]";
+
             flattened.append(nodeInfo);
             stack.addAll(List.of(node.getChildren()));
         }
@@ -85,10 +109,13 @@ public class NGramTreeNodeFileHandler {
     public static NGramTreeNode deserialize(String serializedData) {
         Stack<Pair<NGramTreeNode, Integer>> stack = new Stack<>();
 
+        String[] backreferences = new String[251];
+
         NGramTreeNode rootNode = null;
 
         StringBuilder buff = new StringBuilder();
         String letter = "";
+        boolean isBackReference = false;
 
         for (int i = 0; i < serializedData.length(); i ++) {
             String currChar = serializedData.substring(i, i + 1);
@@ -99,6 +126,10 @@ public class NGramTreeNodeFileHandler {
                     int nChildren = Integer.parseInt(buff.toString());
                     buff.setLength(0);
                     letter = "";
+                    isBackReference = false;
+
+                    int nodeHash = rollingHash(newNode.getWord(), 31, 251) % 251;
+                    backreferences[nodeHash] = newNode.getWord();
 
                     Pair<NGramTreeNode, Integer> newNodeData = new Pair<>(newNode, nChildren);
 
@@ -110,8 +141,16 @@ public class NGramTreeNodeFileHandler {
 
                     deflateStack(stack, newNodeData);
                 }
+                case "}" -> {
+                    isBackReference = true;
+                }
                 case "|" -> {
-                    letter = buff.toString();
+                    if (isBackReference) {
+                        int idx = Integer.parseInt(buff.toString());
+                        letter = backreferences[idx];
+                    } else {
+                        letter = buff.toString();
+                    }
                     buff.setLength(0);
                 }
                 default -> buff.append(currChar);
