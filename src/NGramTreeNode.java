@@ -9,10 +9,6 @@ class MalformedSerialBinaryException extends Exception {
     }
 }
 
-final class SerializationCodec {
-    final static int END_WORD_RANGE_START = 0xF0;
-}
-
 class Pair<A, B> {
     private A first;
     private B second;

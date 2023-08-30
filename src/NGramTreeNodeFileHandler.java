@@ -6,9 +6,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 
+final class SerializationCodec {
+    final static int END_WORD_RANGE_START = 0xF0;
+}
+
 public class NGramTreeNodeFileHandler {
 
-    public String serialize(NGramTreeNode root) {
+    public static String serialize(NGramTreeNode root) {
         StringBuilder flattened = new StringBuilder();
         Stack<NGramTreeNode> stack = new Stack<>();
 
@@ -53,7 +57,7 @@ public class NGramTreeNodeFileHandler {
         }
     }
 
-    static void cascadeDeflateStack(Stack<Pair<NGramTreeNode, Integer>> stack, Pair<NGramTreeNode, Integer> newNodeData) {
+    static void deflateStack(Stack<Pair<NGramTreeNode, Integer>> stack, Pair<NGramTreeNode, Integer> newNodeData) {
         Pair<NGramTreeNode, Integer> parentData = stack.pop();
         parentData.getFirst().addChild(newNodeData.getFirst());
         parentData.setSecond(parentData.getSecond() - 1);
@@ -104,7 +108,7 @@ public class NGramTreeNodeFileHandler {
                         continue;
                     }
 
-                    cascadeDeflateStack(stack, newNodeData);
+                    deflateStack(stack, newNodeData);
                 }
                 case "|" -> {
                     letter = buff.toString();
@@ -169,7 +173,7 @@ public class NGramTreeNodeFileHandler {
                     continue;
                 }
 
-                cascadeDeflateStack(stack, newNodeData);
+                deflateStack(stack, newNodeData);
                 continue;
             }
 
