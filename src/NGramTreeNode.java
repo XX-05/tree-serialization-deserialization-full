@@ -1,44 +1,8 @@
+import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
-
-
-class MalformedSerialBinaryException extends Exception {
-    public MalformedSerialBinaryException(String msg) {
-        super(msg);
-    }
-}
-
-class Pair<A, B> {
-    private A first;
-    private B second;
-
-    public Pair(A first, B second) {
-        this.first = first;
-        this.second = second;
-    }
-
-    public A getFirst() {
-        return first;
-    }
-
-    public void setFirst(A newValue) {
-        first = newValue;
-    }
-
-    public B getSecond() {
-        return second;
-    }
-
-    public void setSecond(B newValue) {
-        second = newValue;
-    }
-
-    @Override
-    public String toString() {
-        return "(" + first + ", " + second + ")";
-    }
-}
 
 
 public class NGramTreeNode {
@@ -111,6 +75,16 @@ public class NGramTreeNode {
 
     public NGramTreeNode[] getChildren() {
         return children.values().toArray(new NGramTreeNode[0]);
+    }
+
+    public ArrayList<String> getChildWords() {
+        ArrayList<String> childWords = new ArrayList<>();
+
+        for (NGramTreeNode c : children.values()) {
+            childWords.add(c.word);
+        }
+
+        return childWords;
     }
 
     /**

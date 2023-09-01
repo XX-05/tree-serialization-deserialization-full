@@ -6,34 +6,89 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 
+
+class Pair<A, B> {
+    private A first;
+    private B second;
+
+    public Pair(A first, B second) {
+        this.first = first;
+        this.second = second;
+    }
+
+    public A getFirst() {
+        return first;
+    }
+
+    public void setFirst(A newValue) {
+        first = newValue;
+    }
+
+    public B getSecond() {
+        return second;
+    }
+
+    public void setSecond(B newValue) {
+        second = newValue;
+    }
+
+    @Override
+    public String toString() {
+        return "(" + first + ", " + second + ")";
+    }
+
+    public boolean equals(Pair<?, ?> other) {
+        if (other.first.getClass() != first.getClass())
+            return false;
+        if (other.second.getClass() != second.getClass())
+            return false;
+
+        if (!other.first.equals(first))
+            return false;
+        return other.second.equals(second);
+    }
+}
+
+class MalformedSerialBinaryException extends Exception {
+    public MalformedSerialBinaryException(String msg) {
+        super(msg);
+    }
+}
+
+
 final class SerializationCodec {
-    final static int END_WORD_RANGE_START = 0xF0;
-    final static int BACKREFERENCE = 0x80;
+    final static int END_WORD_RANGE_START = 0xfb;
+    final static int BACKREFERENCE = 0xf0;
+    final static int MAX_BACKREFERENCE = 251;
 }
 
 public class NGramTreeNodeFileHandler {
 
-    private static int rollingHash(String s, int power, int modulo) {
+    static int rollingHash(String s, int power, int modulo) {
         int hash = 0;
         long p_pow = 1;
         for (char c : s.toCharArray()) {
-            hash = (int) ((hash + (c - 'a' + 1) * p_pow) % modulo);
+            hash = (int) ((hash + (c - ' ' + 1) * p_pow) % modulo);
             p_pow = (p_pow * power) % modulo;
         }
-        return Math.abs(hash);
+        return hash;
+    }
+    
+    static int rollingHash(String s) {
+        return rollingHash(s, 97, SerializationCodec.MAX_BACKREFERENCE);
     }
 
     public static String serialize(NGramTreeNode root) {
         StringBuilder flattened = new StringBuilder();
         Stack<NGramTreeNode> stack = new Stack<>();
 
-        String[] backreferences = new String[251];
+        String[] backreferences = new String[SerializationCodec.MAX_BACKREFERENCE];
 
         stack.add(root);
 
         while (!stack.isEmpty()) {
             NGramTreeNode node = stack.pop();
-            int nodeHash = rollingHash(node.getWord(), 31, 251) % 251;
+            int nodeHash = rollingHash(node.getWord());
 
             String nodeInfo;
             if (node.getWord().equals(backreferences[nodeHash])) {
@@ -53,7 +108,7 @@ public class NGramTreeNodeFileHandler {
     }
 
     static byte[] encodeNodeBinary(NGramTreeNode node) {
-        int nChildren = node.getChildren().length;
+        int nChildren = node.getChildrenCount();
         int nChildrenBytes = (int) Math.ceil(Math.log(nChildren + 1) / Math.log(2) / 8.0);
         byte[] wordBytes = node.getWord().getBytes(StandardCharsets.US_ASCII);
 
@@ -62,6 +117,7 @@ public class NGramTreeNodeFileHandler {
 
         encoded[wordBytes.length] = (byte) (SerializationCodec.END_WORD_RANGE_START + nChildrenBytes);
 
+        // copy nChildren bytes into tail-end of encoded
         for (int i = 0; i < nChildrenBytes; i ++) {
             encoded[encoded.length - i - 1] = (byte) (nChildren & 0xff);
             nChildren = nChildren >> 8;
@@ -70,13 +126,43 @@ public class NGramTreeNodeFileHandler {
         return encoded;
     }
 
+    static byte[] encodeNodeBackreferenceBinary(int backreference, int nChildren) {
+        int nChildrenBytes = (int) Math.ceil(Math.log(nChildren + 1) / Math.log(2) / 8.0);
+
+        byte[] encoded = new byte[3 + nChildrenBytes];
+
+        // copy nChildren bytes into tail-end of encoded
+        for (int i = 0; i < nChildrenBytes; i ++) {
+            encoded[encoded.length - i - 1] = (byte) (nChildren & 0xff);
+            nChildren = nChildren >> 8;
+        }
+
+        encoded[0] = (byte) SerializationCodec.BACKREFERENCE;
+
+        byte idx = (byte) backreference;
+        encoded[1] = idx;
+
+        encoded[2] = (byte) (SerializationCodec.END_WORD_RANGE_START + nChildrenBytes);
+
+        return encoded;
+    }
+
     public static void serializeBinary(NGramTreeNode root, OutputStream fw) throws IOException {
         Stack<NGramTreeNode> stack = new Stack<>();
         stack.add(root);
 
+        String[] backreferences = new String[SerializationCodec.MAX_BACKREFERENCE];
+
         while (!stack.isEmpty()) {
             NGramTreeNode node = stack.pop();
-            fw.write(encodeNodeBinary(node));
+            int nodeHash = rollingHash(node.getWord());
+
+            if (node.getWord().equals(backreferences[nodeHash])) {
+                fw.write(encodeNodeBackreferenceBinary(nodeHash, node.getChildrenCount()));
+            } else {
+                backreferences[nodeHash] = node.getWord();
+                fw.write(encodeNodeBinary(node));
+            }
             stack.addAll(List.of(node.getChildren()));
         }
     }
@@ -109,7 +195,7 @@ public class NGramTreeNodeFileHandler {
     public static NGramTreeNode deserialize(String serializedData) {
         Stack<Pair<NGramTreeNode, Integer>> stack = new Stack<>();
 
-        String[] backreferences = new String[251];
+        String[] backreferences = new String[SerializationCodec.MAX_BACKREFERENCE];
 
         NGramTreeNode rootNode = null;
 
@@ -128,7 +214,7 @@ public class NGramTreeNodeFileHandler {
                     letter = "";
                     isBackReference = false;
 
-                    int nodeHash = rollingHash(newNode.getWord(), 31, 251) % 251;
+                    int nodeHash = rollingHash(newNode.getWord());
                     backreferences[nodeHash] = newNode.getWord();
 
                     Pair<NGramTreeNode, Integer> newNodeData = new Pair<>(newNode, nChildren);
@@ -174,7 +260,7 @@ public class NGramTreeNodeFileHandler {
         return word.toString();
     }
 
-    private static int parseNChildren(InputStream fr, int nBytes) throws IOException {
+    static int parseNChildren(InputStream fr, int nBytes) throws IOException {
         int nChildren = 0;
         for (int i = 0; i < nBytes - SerializationCodec.END_WORD_RANGE_START; i++) {
             nChildren = (nChildren & 0xFF) << 8 | (fr.read() & 0xFF);
@@ -194,17 +280,27 @@ public class NGramTreeNodeFileHandler {
         NGramTreeNode rootNode = null;
         Stack<Pair<NGramTreeNode, Integer>> stack = new Stack<>();
 
+        String[] backreferences = new String[SerializationCodec.MAX_BACKREFERENCE];
+
         ArrayList<Byte> buff = new ArrayList<>();
 
         int currByte;
         while ((currByte = fr.read()) != -1) {
             if (currByte >= SerializationCodec.END_WORD_RANGE_START) {
                 int nChildren = parseNChildren(fr, currByte);
-                String word = parseBuffToString(buff);
+                String word;
+                if (buff.size() > 1 && buff.get(0) == (byte) SerializationCodec.BACKREFERENCE) {
+                    word = backreferences[buff.get(1) & 0xff];
+                } else {
+                    word = parseBuffToString(buff);
+                }
                 buff.clear();
 
                 NGramTreeNode node = new NGramTreeNode(word);
                 Pair<NGramTreeNode, Integer> newNodeData = new Pair<>(node, nChildren);
+
+                int nodeHash = rollingHash(word);
+                backreferences[nodeHash] = word;
 
                 if (rootNode == null) {
                     rootNode = node;
