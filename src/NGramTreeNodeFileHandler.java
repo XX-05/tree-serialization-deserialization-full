@@ -226,15 +226,17 @@ public class NGramTreeNodeFileHandler {
      *                    to it during reconstruction.
      */
     static void deflateStack(Stack<Pair<NGramTreeNode, Integer>> stack, Pair<NGramTreeNode, Integer> newNodeData) {
-        Pair<NGramTreeNode, Integer> parentData = stack.pop();
+        Pair<NGramTreeNode, Integer> parentData = stack.get(stack.size() - 1);
         parentData.getFirst().addChild(newNodeData.getFirst());
         parentData.setSecond(parentData.getSecond() - 1);
 
-        if (parentData.getSecond() > 0)
-            stack.add(parentData);
+        if (parentData.getSecond() == 0)
+            // pop here instead of originally popping and reinserting to reduce unnecessary stack manipulation
+            stack.pop();
         if (newNodeData.getSecond() > 0)
             stack.add(newNodeData);
 
+        // ** deflate stack **
         for (int j = stack.size() - 1; j > 0; j--) {
             Pair<NGramTreeNode, Integer> n = stack.get(j);
             if (n.getSecond() > 0) {
