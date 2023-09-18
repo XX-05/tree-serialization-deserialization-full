@@ -98,9 +98,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
 
                     parsed ++;
                 }
-                case "}" -> {
-                    isBackReference = true;
-                }
+                case "}" -> isBackReference = true;
                 case "|" -> {
                     if (isBackReference) {
                         int idx = Integer.parseInt(buff.toString());
@@ -155,7 +153,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
         return backreferences;
     }
 
-    public static void testComputeBackreferences(NGramTreeNode root) throws IOException, MalformedSerialBinaryException {
+    public static void testComputeBackreferences(NGramTreeNode root) throws IOException {
         ArrayList<Pair<Integer, Integer>> backreferences = computeBackreferences(root);
 
         ArrayList<Pair<Integer, Integer>> backreferencesTxt = parseBackreferencesPlainText(NGramTreeNodeFileHandler.serialize(root));
@@ -163,7 +161,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
         ByteArrayOutputStream fw = new ByteArrayOutputStream();
         NGramTreeNodeFileHandler.serializeBinary(root, fw);
         ByteArrayInputStream fr = new ByteArrayInputStream(fw.toByteArray());
-        ArrayList<Pair<Integer, Integer>> backreferencesBin = backreferencesBin = parseBackreferencesBinary(fr);
+        ArrayList<Pair<Integer, Integer>> backreferencesBin = parseBackreferencesBinary(fr);
 
         assert backreferencesTxt.size() == backreferencesBin.size() && backreferencesBin.size() == backreferences.size();
 
