@@ -177,10 +177,23 @@ public class TestNGramTreeNodeSingleNodeDecoding {
     }
 
 
+    private static String readFile(String fileName) throws IOException {
+        BufferedReader reader = new BufferedReader(new FileReader(fileName));
+        StringBuilder stringBuilder = new StringBuilder();
+        char[] buffer = new char[10];
+        while (reader.read(buffer) != -1) {
+            stringBuilder.append(new String(buffer));
+            buffer = new char[10];
+        }
+        reader.close();
+
+        return stringBuilder.toString();
+    }
+
     public static void main(String[] args) throws IOException, MalformedSerialBinaryException {
         testPairEquals();
 
-        String serialized = Main.readFile("serialized.ngrams");
+        String serialized = readFile("serialized.ngrams");
         NGramTreeNode root = NGramTreeNodeFileHandler.deserialize(serialized);
 
         System.out.println(Arrays.toString(root.predictNextWord("hi my name is".split(" "))));
