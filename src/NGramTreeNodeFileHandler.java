@@ -57,9 +57,9 @@ class MalformedSerialBinaryException extends Exception {
 
 
 final class SerializationCodec {
-    final static int END_WORD_RANGE_START = 0xfb;
-    final static int BACKREFERENCE = 0xf0;
-    final static int MAX_BACKREFERENCE = 251;
+    final static int BACKREFERENCE = 0xf1;
+    final static int END_WORD_RANGE_START = BACKREFERENCE + 1;
+    final static int MAX_BACKREFERENCE = 0xff;
 }
 
 public class NGramTreeNodeFileHandler {
@@ -117,7 +117,7 @@ public class NGramTreeNodeFileHandler {
 
         encoded[wordBytes.length] = (byte) (SerializationCodec.END_WORD_RANGE_START + nChildrenBytes);
 
-        // copy nChildren bytes into tail-end of encoded
+        // copy nChildren bytes into tail-end of encoded array
         for (int i = 0; i < nChildrenBytes; i ++) {
             encoded[encoded.length - i - 1] = (byte) (nChildren & 0xff);
             nChildren = nChildren >> 8;
@@ -131,7 +131,7 @@ public class NGramTreeNodeFileHandler {
 
         byte[] encoded = new byte[3 + nChildrenBytes];
 
-        // copy nChildren bytes into tail-end of encoded
+        // copy nChildren bytes into tail-end of encoded array
         for (int i = 0; i < nChildrenBytes; i ++) {
             encoded[encoded.length - i - 1] = (byte) (nChildren & 0xff);
             nChildren = nChildren >> 8;
@@ -227,9 +227,7 @@ public class NGramTreeNodeFileHandler {
 
                     deflateStack(stack, newNodeData);
                 }
-                case "}" -> {
-                    isBackReference = true;
-                }
+                case "}" -> isBackReference = true;
                 case "|" -> {
                     if (isBackReference) {
                         int idx = Integer.parseInt(buff.toString());
@@ -260,6 +258,15 @@ public class NGramTreeNodeFileHandler {
         return word.toString();
     }
 
+    /**
+     * Parses the next nBytes of the file and returns the integer,
+     * nChildren, that they store (big endian).
+     *
+     * @param fr The file input stream
+     * @param nBytes The number of bytes storing nChildren
+     * @return The parsed nChildren value
+     * @throws IOException when there is an issue reading from fr.
+     */
     static int parseNChildren(InputStream fr, int nBytes) throws IOException {
         int nChildren = 0;
         for (int i = 0; i < nBytes - SerializationCodec.END_WORD_RANGE_START; i++) {
@@ -286,14 +293,16 @@ public class NGramTreeNodeFileHandler {
 
         int currByte;
         while ((currByte = fr.read()) != -1) {
-            if (currByte >= SerializationCodec.END_WORD_RANGE_START) {
-                int nChildren = parseNChildren(fr, currByte);
+            if (currByte >= SerializationCodec.BACKREFERENCE) {
                 String word;
-                if (buff.size() > 1 && buff.get(0) == (byte) SerializationCodec.BACKREFERENCE) {
-                    word = backreferences[buff.get(1) & 0xff];
+                if (currByte == SerializationCodec.BACKREFERENCE) {
+                    int idx = fr.read() & 0xff;
+                    word = backreferences[idx];
+                    currByte = fr.read();
                 } else {
                     word = parseBuffToString(buff);
                 }
+                int nChildren = parseNChildren(fr, currByte);
                 buff.clear();
 
                 NGramTreeNode node = new NGramTreeNode(word);
@@ -309,10 +318,9 @@ public class NGramTreeNodeFileHandler {
                 }
 
                 deflateStack(stack, newNodeData);
-                continue;
+            } else {
+                buff.add((byte) currByte);
             }
-
-            buff.add((byte) currByte);
         }
 
         if (rootNode == null) {

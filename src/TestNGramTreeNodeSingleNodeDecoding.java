@@ -128,16 +128,18 @@ public class TestNGramTreeNodeSingleNodeDecoding {
 
         int currByte;
         while ((currByte = fr.read()) != -1) {
-            if (currByte >= SerializationCodec.END_WORD_RANGE_START) {
+            if (currByte >= SerializationCodec.BACKREFERENCE) {
                 parsed ++;
-                NGramTreeNodeFileHandler.parseNChildren(fr, currByte);
                 String word;
-                if (buff.size() > 1 && buff.get(0) == (byte)SerializationCodec.BACKREFERENCE) {
-                    word = lookupTable[buff.get(1) & 0xFF];
-                    backreferences.add(new Pair<>(parsed, buff.get(1) & 0xFF));
+                if (currByte == SerializationCodec.BACKREFERENCE) {
+                    word = lookupTable[fr.read() & 0xff];
+                    currByte = fr.read();
+
+                    backreferences.add(new Pair<>(parsed, buff.get(0) & 0xFF));
                 } else {
                     word = NGramTreeNodeFileHandler.parseBuffToString(buff);
                 }
+                NGramTreeNodeFileHandler.parseNChildren(fr, currByte);
                 buff.clear();
 
                 int nodeHash = NGramTreeNodeFileHandler.rollingHash(word);
@@ -184,7 +186,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
 
         System.out.println(root.branchSize());
 
-        testComputeBackreferences(root);
+//        testComputeBackreferences(root);
 
         long startTime = System.nanoTime();
         testPlainTextSerializationDeserialization(root);
@@ -203,5 +205,9 @@ public class TestNGramTreeNodeSingleNodeDecoding {
         milliseconds = (double) duration / 1_000_000; // Convert nanoseconds to milliseconds
 
         System.out.println("binary (de)serialization time: " + milliseconds + " ms");
+
+        try (FileOutputStream fw = new FileOutputStream("lookups256.bin.ngrams")) {
+            NGramTreeNodeFileHandler.serializeBinary(root, fw);
+        }
     }
 }
