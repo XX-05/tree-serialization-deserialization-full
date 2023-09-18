@@ -64,6 +64,14 @@ final class SerializationCodec {
 
 public class NGramTreeNodeFileHandler {
 
+    /**
+     * Computes the rolling hash of a given string, s.
+     *
+     * @param s The string to hash
+     * @param power The power to use in the hash
+     * @param modulo The maximum value of the hash
+     * @return The rolling hash of s
+     */
     static int rollingHash(String s, int power, int modulo) {
         int hash = 0;
         long p_pow = 1;
@@ -73,11 +81,22 @@ public class NGramTreeNodeFileHandler {
         }
         return hash;
     }
-    
-    static int rollingHash(String s) {
+
+    /**
+     * Computes the rolling hash of a given string, s.
+     *
+     * @return The rolling hash of s.
+    */
+     static int rollingHash(String s) {
         return rollingHash(s, 97, SerializationCodec.MAX_BACKREFERENCE);
     }
 
+    /**
+     * Serializes a given NGramTreeNode tree as a string.
+     *
+     * @param root The root node of the tree
+     * @return The string representation of root
+     */
     public static String serialize(NGramTreeNode root) {
         StringBuilder flattened = new StringBuilder();
         Stack<NGramTreeNode> stack = new Stack<>();
@@ -107,6 +126,13 @@ public class NGramTreeNodeFileHandler {
         return flattened.toString();
     }
 
+    /**
+     * Encodes a NGramTreeNode as a byte chunk
+     * storing the node's word and its number of children.
+     *
+     * @param node The node to encode
+     * @return A byte chunk storing the node's data.
+     */
     static byte[] encodeNodeBinary(NGramTreeNode node) {
         int nChildren = node.getChildrenCount();
         int nChildrenBytes = (int) Math.ceil(Math.log(nChildren + 1) / Math.log(2) / 8.0);
@@ -126,6 +152,17 @@ public class NGramTreeNodeFileHandler {
         return encoded;
     }
 
+    /**
+     * Creates a special byte chunk to represent a given node.
+     * This is used when the word of a node being serialized has already been
+     * seen, allowing its word can be retrieved by a backreference. This generally
+     * saves space by restricting the word data stored to only 2 bytes instead of
+     * however long the word actually is.
+     *
+     * @param backreference The index of the node's word in the backreference array
+     * @param nChildren The number of children the node has.
+     * @return A new backreference byte chunk.
+     */
     static byte[] encodeNodeBackreferenceBinary(int backreference, int nChildren) {
         int nChildrenBytes = (int) Math.ceil(Math.log(nChildren + 1) / Math.log(2) / 8.0);
 
@@ -147,6 +184,14 @@ public class NGramTreeNodeFileHandler {
         return encoded;
     }
 
+    /**
+     * Serializes a given NGramTreeNode tree as a collection of byte chunks
+     * representing the tree.
+     *
+     * @param root The root node in the tree
+     * @param fw An OutputStream to write the serialized content to
+     * @throws IOException If there is a problem writing to fw.
+     */
     public static void serializeBinary(NGramTreeNode root, OutputStream fw) throws IOException {
         Stack<NGramTreeNode> stack = new Stack<>();
         stack.add(root);
@@ -167,6 +212,19 @@ public class NGramTreeNodeFileHandler {
         }
     }
 
+    /**
+     * The magic of the tree reconstruction algorithm:
+     * deflateStack pops the previous node (parent) in the stack, adds the newNodeData to it,
+     * reduces the parent's remaining children value by 1, then adds the parent and child data
+     * back onto to the stack if their remaining children is greater than 0. After this,
+     * the stack is 'deflated' and all nodes with 0 remaining children are removed from the top
+     * of the stack until a node with > 0 remaining children is reached.
+     *
+     * @param stack The stack populated by previous deflateStack calls which stores the intermediate state
+     *              of the node reconstruction.
+     * @param newNodeData A Pair storing the new node to add and the number of children that must be attached
+     *                    to it during reconstruction.
+     */
     static void deflateStack(Stack<Pair<NGramTreeNode, Integer>> stack, Pair<NGramTreeNode, Integer> newNodeData) {
         Pair<NGramTreeNode, Integer> parentData = stack.pop();
         parentData.getFirst().addChild(newNodeData.getFirst());
@@ -187,7 +245,7 @@ public class NGramTreeNodeFileHandler {
     }
 
     /**
-     * Deserializes a serialized string representation of an NGramTree into a new NGramTreeNode object.
+     * Deserializes a string representation of an NGramTree into a new NGramTreeNode object.
      *
      * @param serializedData The serialized NGramTreeNode string.
      * @return The NGramTreeNode reconstructed from the serialized data.
@@ -245,7 +303,7 @@ public class NGramTreeNodeFileHandler {
     }
 
     /**
-     * Converts an ArrayList of bytes to a String.
+     * Converts an ArrayList of (character) bytes to a String.
      *
      * @param buff The ArrayList containing the byte data.
      * @return The String representation of the byte data.
