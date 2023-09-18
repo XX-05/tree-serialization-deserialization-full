@@ -132,10 +132,11 @@ public class TestNGramTreeNodeSingleNodeDecoding {
                 parsed ++;
                 String word;
                 if (currByte == SerializationCodec.BACKREFERENCE) {
-                    word = lookupTable[fr.read() & 0xff];
+                    int idx = fr.read() & 0xff;
+                    word = lookupTable[idx];
                     currByte = fr.read();
 
-                    backreferences.add(new Pair<>(parsed, buff.get(0) & 0xFF));
+                    backreferences.add(new Pair<>(parsed, idx));
                 } else {
                     word = NGramTreeNodeFileHandler.parseBuffToString(buff);
                 }
@@ -186,7 +187,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
 
         System.out.println(root.branchSize());
 
-//        testComputeBackreferences(root);
+        testComputeBackreferences(root);
 
         long startTime = System.nanoTime();
         testPlainTextSerializationDeserialization(root);
