@@ -127,11 +127,11 @@ public class NGramTreeNodeFileHandler {
     }
 
     /**
-     * Encodes a NGramTreeNode as a byte chunk
+     * Encodes a NGramTreeNode as a byte block
      * storing the node's word and its number of children.
      *
      * @param node The node to encode
-     * @return A byte chunk storing the node's data.
+     * @return A byte block storing the node's data.
      */
     static byte[] encodeNodeBinary(NGramTreeNode node) {
         int nChildren = node.getChildrenCount();
@@ -170,7 +170,7 @@ public class NGramTreeNodeFileHandler {
     }
 
     /**
-     * Creates a special byte chunk to represent a given node.
+     * Creates a special byte block to represent a given node.
      * This is used when the word of a node being serialized has already been
      * seen, allowing its word can be retrieved by a backreference. This generally
      * saves space by restricting the word data stored to only 2 bytes instead of
@@ -178,7 +178,7 @@ public class NGramTreeNodeFileHandler {
      *
      * @param backreference The index of the node's word in the backreference array
      * @param nChildren The number of children the node has.
-     * @return A new backreference byte chunk.
+     * @return A new backreference byte block.
      */
     static byte[] encodeNodeBackreferenceBinary(int backreference, int nChildren) {
         int nChildrenBytes = computeValByteSize(nChildren);
@@ -202,7 +202,7 @@ public class NGramTreeNodeFileHandler {
     }
 
     /**
-     * Serializes a given NGramTreeNode tree as a collection of byte chunks
+     * Serializes a given NGramTreeNode tree as a collection of byte blocks
      * representing the tree.
      *
      * @param root The root node in the tree
@@ -371,14 +371,16 @@ public class NGramTreeNodeFileHandler {
         int currByte;
         while ((currByte = fr.read()) != -1) {
             if (currByte >= SerializationCodec.BACKREFERENCE) {
-                String word;
+                // parses buff into word for the standard block case
+                // if the current block is a backreference, word is set to an empty string
+                String word = parseBuffToString(buff);
+
                 if (currByte == SerializationCodec.BACKREFERENCE) {
                     int idx = fr.read() & 0xff;
                     word = backreferences[idx];
-                    currByte = fr.read();
-                } else {
-                    word = parseBuffToString(buff);
+                    currByte = fr.read(); // read byte storing nChildren byte length to match the standard case
                 }
+
                 int nChildren = parseNChildren(fr, currByte);
                 buff.clear();
 
@@ -394,7 +396,7 @@ public class NGramTreeNodeFileHandler {
                     continue;
                 }
 
-                deflateStack(stack, newNodeData);
+                deflateStack(stack, newNodeData);  // tree reconstruction magic
             } else {
                 buff.add((byte) currByte);
             }
