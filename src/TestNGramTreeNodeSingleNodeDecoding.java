@@ -174,6 +174,20 @@ public class TestNGramTreeNodeSingleNodeDecoding {
         }
     }
 
+    private static void testNChildrenBytesCompute() {
+        for (int i = 0; i < 15000; i ++) {
+            int b1 = (int) Math.ceil(Math.log(i + 1) / Math.log(2) / 8.0);
+            int b2 = 0;
+            int ic = i;
+            while (ic > 0) {
+                b2 += 1;
+                ic = ic >> 8;
+            }
+            if (b1 != b2) {
+                System.out.println("original: " + b1 + "new: " + b2 + "i: " + i);
+            }
+        }
+    }
 
     private static String readFile(String fileName) throws IOException {
         BufferedReader reader = new BufferedReader(new FileReader(fileName));
@@ -189,6 +203,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
     }
 
     public static void main(String[] args) throws IOException, MalformedSerialBinaryException {
+        testNChildrenBytesCompute();
         testPairEquals();
 
         String serialized = readFile("serialized.ngrams");

@@ -153,6 +153,23 @@ public class NGramTreeNodeFileHandler {
     }
 
     /**
+     * Computes and returns the minimum number of bytes needed
+     * to represent the given val. Note that this method
+     * will return 0 for 0.
+     *
+     * @param val The integer value
+     * @return The number of bytes needed to represent val
+     */
+    static int computeValByteSize(int val) {
+        int minBytes = 0;
+        while (val > 0) {
+            minBytes ++;
+            val = val >> 8;
+        }
+        return minBytes;
+    }
+
+    /**
      * Creates a special byte chunk to represent a given node.
      * This is used when the word of a node being serialized has already been
      * seen, allowing its word can be retrieved by a backreference. This generally
@@ -164,7 +181,7 @@ public class NGramTreeNodeFileHandler {
      * @return A new backreference byte chunk.
      */
     static byte[] encodeNodeBackreferenceBinary(int backreference, int nChildren) {
-        int nChildrenBytes = (int) Math.ceil(Math.log(nChildren + 1) / Math.log(2) / 8.0);
+        int nChildrenBytes = computeValByteSize(nChildren);
 
         byte[] encoded = new byte[3 + nChildrenBytes];
 
