@@ -1,23 +1,65 @@
-import java.lang.reflect.Array;
+/*
+File: NGramTreeNode.java
+Copyright (c) August 18, 2023, Matthew Aharonian
+
+Author: Matthew Aharonian
+Created: August 18, 2023
+Version: 1.0
+
+Description:
+NGramTreeNode is a class representing a node in an N-gram tree. This class
+is used for creating and managing N-gram trees, which are commonly employed
+in natural language processing tasks such as text prediction and language
+modeling. Each node in the tree holds a word and references to its child nodes,
+enabling the representation of word sequences and their relationships.
+
+This class offers a range of methods for working with N-gram nodes,
+including adding child nodes, searching for predictions, and comparing nodes
+for equality.
+
+Disclaimer:
+This code is provided as-is and is not guaranteed to be error-free. It is
+intended for educational and reference purposes.
+*/
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
 
 
+/**
+ * This class represents a node in an N-gram tree, where each node contains a word and references to its child nodes.
+ * N-gram trees are commonly used in natural language processing for predictive text and language modeling.
+ */
 public class NGramTreeNode {
     private final String word;
     private final HashMap<String, NGramTreeNode> children;
 
+    /**
+     * Constructs a new NGramTreeNode with the specified word.
+     *
+     * @param nodeWord The word associated with this node.
+     */
     public NGramTreeNode(String nodeWord) {
         word = nodeWord;
         children = new HashMap<>();
     }
 
+    /**
+     * Returns the word associated with this node.
+     *
+     * @return The word associated with this node.
+     */
     public String getWord() {
         return word;
     }
 
+    /**
+     * Returns a string representation of this node and its children
+     * in the format: <LetterTreeNode: word; Children: <>>.
+     *
+     * @return A string representation of this node and its children.
+     */
     public String toString() {
         StringBuilder childrenString = new StringBuilder();
         if (children.size() > 0) {
@@ -31,6 +73,12 @@ public class NGramTreeNode {
         }
     }
 
+    /**
+     * Does a deep comparison between this node and another.
+     *
+     * @param otherNode The other NGramTreeNode to compare.
+     * @return true if the nodes are deep equal, false otherwise.
+     */
     public boolean deepEquals(NGramTreeNode otherNode) {
         if (!this.word.equals(otherNode.word)) {
             return false;
@@ -73,6 +121,11 @@ public class NGramTreeNode {
         return nodesSeen;
     }
 
+    /**
+     * Returns an array of the child nodes attached to this node.
+     *
+     * @return An array of child nodes.
+     */
     public NGramTreeNode[] getChildren() {
         return children.values().toArray(new NGramTreeNode[0]);
     }
@@ -96,10 +149,22 @@ public class NGramTreeNode {
         return children.size();
     }
 
+    /**
+     * Adds a child node to this node.
+     *
+     * @param childNode The child node to add.
+     */
     public void addChild(NGramTreeNode childNode) {
         children.put(childNode.word, childNode);
     }
 
+    /**
+     * Adds a word as a child node to this node then returns the new node.
+     * If the word already exists as a child, returns the existing child.
+     *
+     * @param word The word to add as a child node.
+     * @return The child node corresponding to the added word.
+     */
     public NGramTreeNode addWord(String word) {
         if (children.containsKey(word))
             return children.get(word);
@@ -110,8 +175,11 @@ public class NGramTreeNode {
     }
 
     /**
-     * Creates a branch off this node populated
-     * with words from the provided n-gram.
+     * Creates a branch stemming from this node
+     * with each child node being a word from the provided n-gram.
+     *
+     * E.g., the n-gram "the quick brown fox" would create the branch:
+     *  the -> quick -> brown -> fox
      *
      * @param nGram An ordered array of words in the n-gram to add.
      */

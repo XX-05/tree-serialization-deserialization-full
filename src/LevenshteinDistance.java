@@ -60,12 +60,4 @@ public class LevenshteinDistance {
 
         return closestWord;
     }
-
-    public static void main(String[] args) {
-        String word1 = "kitten";
-        String word2 = "kitted";
-
-        int distance = calculateDistance(word1, word2);
-        System.out.println("Levenshtein distance between \"" + word1 + "\" and \"" + word2 + "\" is: " + distance);
-    }
 }

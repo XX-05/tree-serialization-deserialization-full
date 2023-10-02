@@ -1,3 +1,23 @@
+/*
+File: NGramTreeNodeFileHandler.java
+Copyright (c) August 18, 2023, Matthew Aharonian
+
+Author: Matthew Aharonian
+Created: August 18, 2023
+Version: 1.0
+
+Description:
+NGramTreeNodeFileHandler is a utility class for handling serialization and
+deserialization of NGramTreeNode objects. This class provides methods for
+serializing NGramTreeNode trees into string and binary formats, as well as
+for deserializing them from these formats. It includes hashing functions, tree
+reconstruction algorithms, and exception handling for malformed binary data.
+
+Disclaimer:
+This code is provided as-is and is not guaranteed to be error-free. It is
+intended for educational and reference purposes.
+*/
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -49,21 +69,32 @@ class Pair<A, B> {
     }
 }
 
+/**
+ * Exception class used for signaling errors related to malformed binary serialization data.
+ * This exception is typically thrown during the deserialization process when the binary data
+ * cannot be properly parsed or does not conform to the expected format.
+ */
 class MalformedSerialBinaryException extends Exception {
     public MalformedSerialBinaryException(String msg) {
         super(msg);
     }
 }
 
-
+/**
+ * Constants used for binary serialization and deserialization of NGramTreeNode objects.
+ */
 final class SerializationCodec {
     final static int BACKREFERENCE = 0xf1;
     final static int END_WORD_RANGE_START = BACKREFERENCE + 1;
     final static int MAX_BACKREFERENCE = 0xff;
 }
 
+/**
+ * A utility class for handling serialization and deserialization of NGramTreeNode objects.
+ * Provides methods to serialize NGramTreeNode trees into string and binary formats,
+ * as well as to deserialize them from these formats.
+ */
 public class NGramTreeNodeFileHandler {
-
     /**
      * Computes the rolling hash of a given string, s.
      *
