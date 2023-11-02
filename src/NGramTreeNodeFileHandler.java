@@ -20,6 +20,7 @@ intended for educational and reference purposes.
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -82,10 +83,26 @@ class MalformedSerialBinaryException extends Exception {
 /**
  * Constants used for binary serialization and deserialization of NGramTreeNode objects.
  */
-final class SerializationCodec {
-    final static int BACKREFERENCE = 0xf1;
-    final static int END_WORD_RANGE_START = BACKREFERENCE + 1;
-    final static int MAX_BACKREFERENCE = 0xff;
+class SerializationCodec {
+    int BACKREFERENCE;
+    int END_WORD_RANGE_START;
+    int MAX_BACKREFERENCE;
+
+    public SerializationCodec(int backreferenceByte, int maxBackreference) {
+        BACKREFERENCE = backreferenceByte;
+        MAX_BACKREFERENCE = maxBackreference;
+
+        END_WORD_RANGE_START = backreferenceByte + 1;
+    }
+}
+
+final class DefaultSerializationCodec extends SerializationCodec {
+    static int defaultBackreference = 0xf1;
+    static int defaultMaxBackreference = 0xff;
+
+    public DefaultSerializationCodec() {
+        super(defaultBackreference, defaultMaxBackreference);
+    }
 }
 
 /**
@@ -94,6 +111,16 @@ final class SerializationCodec {
  * as well as to deserialize them from these formats.
  */
 public class NGramTreeNodeFileHandler {
+    SerializationCodec codec;
+
+    public NGramTreeNodeFileHandler(SerializationCodec serializationCodec) {
+        codec = serializationCodec;
+    }
+
+    public NGramTreeNodeFileHandler() {
+        this(new DefaultSerializationCodec());
+    }
+
     /**
      * Computes the rolling hash of a given string, s.
      *
@@ -117,8 +144,8 @@ public class NGramTreeNodeFileHandler {
      *
      * @return The rolling hash of s.
     */
-     static int rollingHash(String s) {
-        return rollingHash(s, 97, SerializationCodec.MAX_BACKREFERENCE);
+     int rollingHash(String s) {
+        return rollingHash(s, 97, codec.MAX_BACKREFERENCE);
     }
 
     /**
@@ -127,11 +154,11 @@ public class NGramTreeNodeFileHandler {
      * @param root The root node of the tree
      * @return The string representation of root
      */
-    public static String serialize(NGramTreeNode root) {
+    public String serialize(NGramTreeNode root) {
         StringBuilder flattened = new StringBuilder();
         Stack<NGramTreeNode> stack = new Stack<>();
 
-        String[] backreferences = new String[SerializationCodec.MAX_BACKREFERENCE];
+        String[] backreferences = new String[codec.MAX_BACKREFERENCE];
 
         stack.add(root);
 
@@ -156,6 +183,28 @@ public class NGramTreeNodeFileHandler {
         return flattened.toString();
     }
 
+    byte[] generateBinaryHeader() {
+        return new byte[]{
+                'n','t','s','f',
+                (byte) codec.BACKREFERENCE,
+                (byte) codec.MAX_BACKREFERENCE
+        };
+    }
+
+    static SerializationCodec parseBinaryHeader(InputStream fr) throws IOException, MalformedSerialBinaryException {
+        byte[] buff = new byte[6];
+        fr.readNBytes(buff, 0, buff.length);
+
+        // ensure the magic 'ntsf' header is present
+        if (buff[0] != 'n' || buff[1] != 't' || buff[2] != 's' || buff[3] != 'f') {
+            throw new MalformedSerialBinaryException("Invalid magic header!");
+        }
+
+        // elements 4 & 5 of the magic header store
+        // the backreferenceByte and maxBackreference respectively
+        return new SerializationCodec(buff[4] & 0xff, buff[5] & 0xff);
+    }
+
     /**
      * Encodes a NGramTreeNode as a byte block
      * storing the node's word and its number of children.
@@ -163,7 +212,7 @@ public class NGramTreeNodeFileHandler {
      * @param node The node to encode
      * @return A byte block storing the node's data.
      */
-    static byte[] encodeNodeBinary(NGramTreeNode node) {
+    byte[] encodeNodeBinary(NGramTreeNode node) {
         int nChildren = node.getChildrenCount();
         int nChildrenBytes = (int) Math.ceil(Math.log(nChildren + 1) / Math.log(2) / 8.0);
         byte[] wordBytes = node.getWord().getBytes(StandardCharsets.US_ASCII);
@@ -171,7 +220,7 @@ public class NGramTreeNodeFileHandler {
         byte[] encoded = new byte[wordBytes.length + nChildrenBytes + 1];
         System.arraycopy(wordBytes, 0, encoded, 0, wordBytes.length);
 
-        encoded[wordBytes.length] = (byte) (SerializationCodec.END_WORD_RANGE_START + nChildrenBytes);
+        encoded[wordBytes.length] = (byte) (codec.END_WORD_RANGE_START + nChildrenBytes);
 
         // copy nChildren bytes into tail-end of encoded array
         for (int i = 0; i < nChildrenBytes; i ++) {
@@ -210,7 +259,7 @@ public class NGramTreeNodeFileHandler {
      * @param nChildren The number of children the node has.
      * @return A new backreference byte block.
      */
-    static byte[] encodeNodeBackreferenceBinary(int backreference, int nChildren) {
+    byte[] encodeNodeBackreferenceBinary(int backreference, int nChildren) {
         int nChildrenBytes = computeValByteSize(nChildren);
 
         byte[] encoded = new byte[3 + nChildrenBytes];
@@ -221,12 +270,12 @@ public class NGramTreeNodeFileHandler {
             nChildren = nChildren >> 8;
         }
 
-        encoded[0] = (byte) SerializationCodec.BACKREFERENCE;
+        encoded[0] = (byte) codec.BACKREFERENCE;
 
         byte idx = (byte) backreference;
         encoded[1] = idx;
 
-        encoded[2] = (byte) (SerializationCodec.END_WORD_RANGE_START + nChildrenBytes);
+        encoded[2] = (byte) (codec.END_WORD_RANGE_START + nChildrenBytes);
 
         return encoded;
     }
@@ -239,11 +288,13 @@ public class NGramTreeNodeFileHandler {
      * @param fw An OutputStream to write the serialized content to
      * @throws IOException If there is a problem writing to fw.
      */
-    public static void serializeBinary(NGramTreeNode root, OutputStream fw) throws IOException {
+    public void serializeBinary(NGramTreeNode root, OutputStream fw) throws IOException {
         Stack<NGramTreeNode> stack = new Stack<>();
         stack.add(root);
 
-        String[] backreferences = new String[SerializationCodec.MAX_BACKREFERENCE];
+        String[] backreferences = new String[codec.MAX_BACKREFERENCE];
+
+        fw.write(generateBinaryHeader());
 
         while (!stack.isEmpty()) {
             NGramTreeNode node = stack.pop();
@@ -299,10 +350,10 @@ public class NGramTreeNodeFileHandler {
      * @param serializedData The serialized NGramTreeNode string.
      * @return The NGramTreeNode reconstructed from the serialized data.
      */
-    public static NGramTreeNode deserialize(String serializedData) {
+    public NGramTreeNode deserialize(String serializedData) {
         Stack<Pair<NGramTreeNode, Integer>> stack = new Stack<>();
 
-        String[] backreferences = new String[SerializationCodec.MAX_BACKREFERENCE];
+        String[] backreferences = new String[codec.MAX_BACKREFERENCE];
 
         NGramTreeNode rootNode = null;
 
@@ -376,7 +427,7 @@ public class NGramTreeNodeFileHandler {
      */
     static int parseNChildren(InputStream fr, int nBytes) throws IOException {
         int nChildren = 0;
-        for (int i = 0; i < nBytes - SerializationCodec.END_WORD_RANGE_START; i++) {
+        for (int i = 0; i < nBytes; i++) {
             nChildren = (nChildren & 0xFF) << 8 | (fr.read() & 0xFF);
         }
         return nChildren;
@@ -394,30 +445,32 @@ public class NGramTreeNodeFileHandler {
         NGramTreeNode rootNode = null;
         Stack<Pair<NGramTreeNode, Integer>> stack = new Stack<>();
 
-        String[] backreferences = new String[SerializationCodec.MAX_BACKREFERENCE];
+        SerializationCodec codec = parseBinaryHeader(fr);
+
+        String[] backreferences = new String[codec.MAX_BACKREFERENCE];
 
         ArrayList<Byte> buff = new ArrayList<>();
 
         int currByte;
         while ((currByte = fr.read()) != -1) {
-            if (currByte >= SerializationCodec.BACKREFERENCE) {
+            if (currByte >= codec.BACKREFERENCE) {
                 // parses buff into word for the standard block case
                 // if the current block is a backreference, word is set to an empty string
                 String word = parseBuffToString(buff);
 
-                if (currByte == SerializationCodec.BACKREFERENCE) {
+                if (currByte == codec.BACKREFERENCE) {
                     int idx = fr.read() & 0xff;
                     word = backreferences[idx];
                     currByte = fr.read(); // read byte storing nChildren byte length to match the standard case
                 }
 
-                int nChildren = parseNChildren(fr, currByte);
+                int nChildren = parseNChildren(fr, currByte - codec.END_WORD_RANGE_START);
                 buff.clear();
 
                 NGramTreeNode node = new NGramTreeNode(word);
                 Pair<NGramTreeNode, Integer> newNodeData = new Pair<>(node, nChildren);
 
-                int nodeHash = rollingHash(word);
+                int nodeHash = rollingHash(word, 97, codec.MAX_BACKREFERENCE);
                 backreferences[nodeHash] = word;
 
                 if (rootNode == null) {

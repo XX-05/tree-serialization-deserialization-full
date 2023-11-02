@@ -23,7 +23,8 @@ public class TestNGramTreeNodeSingleNodeDecoding {
 
     public static void testBinarySerializationDeserialization(NGramTreeNode root) throws IOException, MalformedSerialBinaryException {
         ByteArrayOutputStream fw = new ByteArrayOutputStream();
-        NGramTreeNodeFileHandler.serializeBinary(root, fw);
+        NGramTreeNodeFileHandler serializationFactory = new NGramTreeNodeFileHandler();
+        serializationFactory.serializeBinary(root, fw);
 
         ByteArrayInputStream fr = new ByteArrayInputStream(fw.toByteArray());
         NGramTreeNode deserialized = NGramTreeNodeFileHandler.deserializeBinary(fr);
@@ -36,8 +37,10 @@ public class TestNGramTreeNodeSingleNodeDecoding {
 
 
     public static void testPlainTextSerializationDeserialization(NGramTreeNode root) {
-        String serialized = NGramTreeNodeFileHandler.serialize(root);
-        NGramTreeNode deserialized = NGramTreeNodeFileHandler.deserialize(serialized);
+        NGramTreeNodeFileHandler serializationFactory = new NGramTreeNodeFileHandler();
+
+        String serialized = serializationFactory.serialize(root);
+        NGramTreeNode deserialized = serializationFactory.deserialize(serialized);
 
         assert deserialized.branchSize() == root.branchSize();
         assert root.deepEquals(deserialized);
@@ -46,10 +49,12 @@ public class TestNGramTreeNodeSingleNodeDecoding {
     }
 
     public static ArrayList<Pair<Integer, Integer>> computeBackreferences(NGramTreeNode root) {
+        NGramTreeNodeFileHandler serializationFactory = new NGramTreeNodeFileHandler();
+
         ArrayList<Pair<Integer, Integer>> backreferences = new ArrayList<>();
         Stack<NGramTreeNode> stack = new Stack<>();
 
-        String[] lookupTable = new String[SerializationCodec.MAX_BACKREFERENCE];
+        String[] lookupTable = new String[serializationFactory.codec.MAX_BACKREFERENCE];
 
         stack.add(root);
 
@@ -59,7 +64,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
             processed ++;
 
             NGramTreeNode node = stack.pop();
-            int nodeHash = NGramTreeNodeFileHandler.rollingHash(node.getWord());
+            int nodeHash = serializationFactory.rollingHash(node.getWord());
 
             if (node.getWord().equals(lookupTable[nodeHash])) {
                 backreferences.add(new Pair<>(processed, nodeHash));
@@ -74,8 +79,10 @@ public class TestNGramTreeNodeSingleNodeDecoding {
     }
 
     private static ArrayList<Pair<Integer, Integer>> parseBackreferencesPlainText(String serializedData) {
+        NGramTreeNodeFileHandler serializationFactory = new NGramTreeNodeFileHandler();
+
         ArrayList<Pair<Integer, Integer>> backreferences = new ArrayList<>();
-        String[] lookupTable = new String[SerializationCodec.MAX_BACKREFERENCE];
+        String[] lookupTable = new String[serializationFactory.codec.MAX_BACKREFERENCE];
 
         StringBuilder buff = new StringBuilder();
         String letter = "";
@@ -93,7 +100,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
                     letter = "";
                     isBackReference = false;
 
-                    int nodeHash = NGramTreeNodeFileHandler.rollingHash(newNode.getWord());
+                    int nodeHash = serializationFactory.rollingHash(newNode.getWord());
                     lookupTable[nodeHash] = newNode.getWord();
 
                     parsed ++;
@@ -118,18 +125,20 @@ public class TestNGramTreeNodeSingleNodeDecoding {
     }
 
     private static ArrayList<Pair<Integer, Integer>> parseBackreferencesBinary(InputStream fr) throws IOException {
+        NGramTreeNodeFileHandler serializationFactory = new NGramTreeNodeFileHandler();
+
         ArrayList<Pair<Integer, Integer>> backreferences = new ArrayList<>();
-        String[] lookupTable = new String[SerializationCodec.MAX_BACKREFERENCE];
+        String[] lookupTable = new String[serializationFactory.codec.MAX_BACKREFERENCE];
 
         ArrayList<Byte> buff = new ArrayList<>();
         int parsed = 0;
 
         int currByte;
         while ((currByte = fr.read()) != -1) {
-            if (currByte >= SerializationCodec.BACKREFERENCE) {
+            if (currByte >= serializationFactory.codec.BACKREFERENCE) {
                 parsed ++;
                 String word;
-                if (currByte == SerializationCodec.BACKREFERENCE) {
+                if (currByte == serializationFactory.codec.BACKREFERENCE) {
                     int idx = fr.read() & 0xff;
                     word = lookupTable[idx];
                     currByte = fr.read();
@@ -138,10 +147,10 @@ public class TestNGramTreeNodeSingleNodeDecoding {
                 } else {
                     word = NGramTreeNodeFileHandler.parseBuffToString(buff);
                 }
-                NGramTreeNodeFileHandler.parseNChildren(fr, currByte);
+                NGramTreeNodeFileHandler.parseNChildren(fr, currByte - serializationFactory.codec.END_WORD_RANGE_START);
                 buff.clear();
 
-                int nodeHash = NGramTreeNodeFileHandler.rollingHash(word);
+                int nodeHash = serializationFactory.rollingHash(word);
                 lookupTable[nodeHash] = word;
 
                 continue;
@@ -156,10 +165,10 @@ public class TestNGramTreeNodeSingleNodeDecoding {
     public static void testComputeBackreferences(NGramTreeNode root) throws IOException {
         ArrayList<Pair<Integer, Integer>> backreferences = computeBackreferences(root);
 
-        ArrayList<Pair<Integer, Integer>> backreferencesTxt = parseBackreferencesPlainText(NGramTreeNodeFileHandler.serialize(root));
+        ArrayList<Pair<Integer, Integer>> backreferencesTxt = parseBackreferencesPlainText((new NGramTreeNodeFileHandler()).serialize(root));
 
         ByteArrayOutputStream fw = new ByteArrayOutputStream();
-        NGramTreeNodeFileHandler.serializeBinary(root, fw);
+        (new NGramTreeNodeFileHandler()).serializeBinary(root, fw);
         ByteArrayInputStream fr = new ByteArrayInputStream(fw.toByteArray());
         ArrayList<Pair<Integer, Integer>> backreferencesBin = parseBackreferencesBinary(fr);
 
@@ -202,18 +211,34 @@ public class TestNGramTreeNodeSingleNodeDecoding {
         return stringBuilder.toString();
     }
 
+    public static void testNonStandardCodec(NGramTreeNode root) throws IOException, MalformedSerialBinaryException {
+        SerializationCodec newCodec = new SerializationCodec(0xf8, 0xf8);
+        NGramTreeNodeFileHandler serializationFactory = new NGramTreeNodeFileHandler(newCodec);
+
+        ByteArrayOutputStream fw = new ByteArrayOutputStream();
+        serializationFactory.serializeBinary(root, fw);
+
+        ByteArrayInputStream fr = new ByteArrayInputStream(fw.toByteArray());
+        NGramTreeNode deserialized = NGramTreeNodeFileHandler.deserializeBinary(fr);
+
+        assert deserialized.branchSize() == root.branchSize();
+        assert root.deepEquals(deserialized);
+
+        System.out.println(Arrays.toString(deserialized.predictNextWord("hi my name is".split(" "))));
+    }
+
     public static void main(String[] args) throws IOException, MalformedSerialBinaryException {
         testNChildrenBytesCompute();
         testPairEquals();
 
         String serialized = readFile("serialized.ngrams");
-        NGramTreeNode root = NGramTreeNodeFileHandler.deserialize(serialized);
+        NGramTreeNode root = (new NGramTreeNodeFileHandler()).deserialize(serialized);
 
         System.out.println(Arrays.toString(root.predictNextWord("hi my name is".split(" "))));
 
         System.out.println(root.branchSize());
 
-        testComputeBackreferences(root);
+//        testComputeBackreferences(root);
 
         long startTime = System.nanoTime();
         testPlainTextSerializationDeserialization(root);
@@ -233,8 +258,11 @@ public class TestNGramTreeNodeSingleNodeDecoding {
 
         System.out.println("binary (de)serialization time: " + milliseconds + " ms");
 
+        testNonStandardCodec(root);
+        System.out.println("non-standard codec pass");
+
         try (FileOutputStream fw = new FileOutputStream("lookups256.bin.ngrams")) {
-            NGramTreeNodeFileHandler.serializeBinary(root, fw);
+            (new NGramTreeNodeFileHandler()).serializeBinary(root, fw);
         }
     }
 }
