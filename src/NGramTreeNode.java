@@ -16,10 +16,6 @@ enabling the representation of word sequences and their relationships.
 This class offers a range of methods for working with N-gram nodes,
 including adding child nodes, searching for predictions, and comparing nodes
 for equality.
-
-Disclaimer:
-This code is provided as-is and is not guaranteed to be error-free. It is
-intended for educational and reference purposes.
 */
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -177,8 +173,7 @@ public class NGramTreeNode {
     /**
      * Creates a branch stemming from this node
      * with each child node being a word from the provided n-gram.
-     *
-     * E.g., the n-gram "the quick brown fox" would create the branch:
+     * For example, the n-gram "the quick brown fox" would create the branch:
      *  the -> quick -> brown -> fox
      *
      * @param nGram An ordered array of words in the n-gram to add.

@@ -12,15 +12,10 @@ deserialization of NGramTreeNode objects. This class provides methods for
 serializing NGramTreeNode trees into string and binary formats, as well as
 for deserializing them from these formats. It includes hashing functions, tree
 reconstruction algorithms, and exception handling for malformed binary data.
-
-Disclaimer:
-This code is provided as-is and is not guaranteed to be error-free. It is
-intended for educational and reference purposes.
 */
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -81,31 +76,6 @@ class MalformedSerialBinaryException extends Exception {
 }
 
 /**
- * Constants used for binary serialization and deserialization of NGramTreeNode objects.
- */
-class SerializationCodec {
-    int BACKREFERENCE;
-    int END_WORD_RANGE_START;
-    int MAX_BACKREFERENCE;
-
-    public SerializationCodec(int backreferenceByte, int maxBackreference) {
-        BACKREFERENCE = backreferenceByte;
-        MAX_BACKREFERENCE = maxBackreference;
-
-        END_WORD_RANGE_START = backreferenceByte + 1;
-    }
-}
-
-final class DefaultSerializationCodec extends SerializationCodec {
-    static int defaultBackreference = 0xf1;
-    static int defaultMaxBackreference = 0xff;
-
-    public DefaultSerializationCodec() {
-        super(defaultBackreference, defaultMaxBackreference);
-    }
-}
-
-/**
  * A utility class for handling serialization and deserialization of NGramTreeNode objects.
  * Provides methods to serialize NGramTreeNode trees into string and binary formats,
  * as well as to deserialize them from these formats.
@@ -113,12 +83,22 @@ final class DefaultSerializationCodec extends SerializationCodec {
 public class NGramTreeNodeFileHandler {
     SerializationCodec codec;
 
+    /**
+     * Creates a new NGramTreeNodeFileHandler which uses the given serialization codec
+     * to serialize and deserialize ngram trees.
+     *
+     * @param serializationCodec The codec to use for binary tree (de)serialization
+     */
     public NGramTreeNodeFileHandler(SerializationCodec serializationCodec) {
         codec = serializationCodec;
     }
 
+    /**
+     * Creates a new NGramTreeNodeFileHandler which uses the default serialization codec
+     * to serialize and deserialize files. See {@link SerializationCodec#DEFAULT_SERIALIZATION_CODEC}.
+     */
     public NGramTreeNodeFileHandler() {
-        this(new DefaultSerializationCodec());
+        this(SerializationCodec.DEFAULT_SERIALIZATION_CODEC);
     }
 
     /**
@@ -142,10 +122,10 @@ public class NGramTreeNodeFileHandler {
     /**
      * Computes the rolling hash of a given string, s.
      *
-     * @return The rolling hash of s.
+     * @return The rolling hash of s
     */
-     int rollingHash(String s) {
-        return rollingHash(s, 97, codec.MAX_BACKREFERENCE);
+    int rollingHash(String s) {
+        return rollingHash(s, 97, codec.BACKREFERENCE_ARRAY_SIZE);
     }
 
     /**
@@ -158,7 +138,7 @@ public class NGramTreeNodeFileHandler {
         StringBuilder flattened = new StringBuilder();
         Stack<NGramTreeNode> stack = new Stack<>();
 
-        String[] backreferences = new String[codec.MAX_BACKREFERENCE];
+        String[] backreferences = new String[codec.BACKREFERENCE_ARRAY_SIZE];
 
         stack.add(root);
 
@@ -183,21 +163,40 @@ public class NGramTreeNodeFileHandler {
         return flattened.toString();
     }
 
-    byte[] generateBinaryHeader() {
+    /**
+     * Generates a binary header for the serialized tree file
+     * storing the codec constants used for serialization & deserialization
+     * as well as a magic header for file identification.
+     *
+     * @return A byte array containing the header bytes
+     */
+    static byte[] generateBinaryHeader(SerializationCodec codec) {
         return new byte[]{
                 'n','t','s','f',
-                (byte) codec.BACKREFERENCE,
-                (byte) codec.MAX_BACKREFERENCE
+                (byte) codec.BACKREFERENCE_BYTE,
+                (byte) codec.BACKREFERENCE_ARRAY_SIZE
         };
     }
 
+    /**
+     * Parses the header of a given serialized tree file and
+     * returns the codec specified by it.
+     *
+     * @param fr An input stream reading the serialized tree file
+     * @return The codec specified by the serialized tree file header
+     * @throws IOException If there is an issue reading the file
+     * @throws MalformedSerialBinaryException If the magic ntsf bytes are not found
+     *      or the expected header size exceeds the actual file size
+     */
     static SerializationCodec parseBinaryHeader(InputStream fr) throws IOException, MalformedSerialBinaryException {
         byte[] buff = new byte[6];
-        fr.readNBytes(buff, 0, buff.length);
+        if (fr.read(buff, 0, buff.length) < buff.length) {
+            throw new MalformedSerialBinaryException("No header found: file too small.");
+        }
 
         // ensure the magic 'ntsf' header is present
         if (buff[0] != 'n' || buff[1] != 't' || buff[2] != 's' || buff[3] != 'f') {
-            throw new MalformedSerialBinaryException("Invalid magic header!");
+            throw new MalformedSerialBinaryException("Invalid header: no magic 'ntsf' bytes");
         }
 
         // elements 4 & 5 of the magic header store
@@ -270,7 +269,7 @@ public class NGramTreeNodeFileHandler {
             nChildren = nChildren >> 8;
         }
 
-        encoded[0] = (byte) codec.BACKREFERENCE;
+        encoded[0] = (byte) codec.BACKREFERENCE_BYTE;
 
         byte idx = (byte) backreference;
         encoded[1] = idx;
@@ -292,9 +291,9 @@ public class NGramTreeNodeFileHandler {
         Stack<NGramTreeNode> stack = new Stack<>();
         stack.add(root);
 
-        String[] backreferences = new String[codec.MAX_BACKREFERENCE];
+        String[] backreferences = new String[codec.BACKREFERENCE_ARRAY_SIZE];
 
-        fw.write(generateBinaryHeader());
+        fw.write(generateBinaryHeader(codec));
 
         while (!stack.isEmpty()) {
             NGramTreeNode node = stack.pop();
@@ -353,7 +352,7 @@ public class NGramTreeNodeFileHandler {
     public NGramTreeNode deserialize(String serializedData) {
         Stack<Pair<NGramTreeNode, Integer>> stack = new Stack<>();
 
-        String[] backreferences = new String[codec.MAX_BACKREFERENCE];
+        String[] backreferences = new String[codec.BACKREFERENCE_ARRAY_SIZE];
 
         NGramTreeNode rootNode = null;
 
@@ -423,7 +422,7 @@ public class NGramTreeNodeFileHandler {
      * @param fr The file input stream
      * @param nBytes The number of bytes storing nChildren
      * @return The parsed nChildren value
-     * @throws IOException when there is an issue reading from fr.
+     * @throws IOException when there is an issue reading from fr
      */
     static int parseNChildren(InputStream fr, int nBytes) throws IOException {
         int nChildren = 0;
@@ -447,18 +446,18 @@ public class NGramTreeNodeFileHandler {
 
         SerializationCodec codec = parseBinaryHeader(fr);
 
-        String[] backreferences = new String[codec.MAX_BACKREFERENCE];
+        String[] backreferences = new String[codec.BACKREFERENCE_ARRAY_SIZE];
 
         ArrayList<Byte> buff = new ArrayList<>();
 
         int currByte;
         while ((currByte = fr.read()) != -1) {
-            if (currByte >= codec.BACKREFERENCE) {
+            if (currByte >= codec.BACKREFERENCE_BYTE) {
                 // parses buff into word for the standard block case
                 // if the current block is a backreference, word is set to an empty string
                 String word = parseBuffToString(buff);
 
-                if (currByte == codec.BACKREFERENCE) {
+                if (currByte == codec.BACKREFERENCE_BYTE) {
                     int idx = fr.read() & 0xff;
                     word = backreferences[idx];
                     currByte = fr.read(); // read byte storing nChildren byte length to match the standard case
@@ -470,7 +469,7 @@ public class NGramTreeNodeFileHandler {
                 NGramTreeNode node = new NGramTreeNode(word);
                 Pair<NGramTreeNode, Integer> newNodeData = new Pair<>(node, nChildren);
 
-                int nodeHash = rollingHash(word, 97, codec.MAX_BACKREFERENCE);
+                int nodeHash = rollingHash(word, 97, codec.BACKREFERENCE_ARRAY_SIZE);
                 backreferences[nodeHash] = word;
 
                 if (rootNode == null) {

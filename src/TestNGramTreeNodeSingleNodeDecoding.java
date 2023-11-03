@@ -54,7 +54,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
         ArrayList<Pair<Integer, Integer>> backreferences = new ArrayList<>();
         Stack<NGramTreeNode> stack = new Stack<>();
 
-        String[] lookupTable = new String[serializationFactory.codec.MAX_BACKREFERENCE];
+        String[] lookupTable = new String[serializationFactory.codec.BACKREFERENCE_ARRAY_SIZE];
 
         stack.add(root);
 
@@ -82,7 +82,7 @@ public class TestNGramTreeNodeSingleNodeDecoding {
         NGramTreeNodeFileHandler serializationFactory = new NGramTreeNodeFileHandler();
 
         ArrayList<Pair<Integer, Integer>> backreferences = new ArrayList<>();
-        String[] lookupTable = new String[serializationFactory.codec.MAX_BACKREFERENCE];
+        String[] lookupTable = new String[serializationFactory.codec.BACKREFERENCE_ARRAY_SIZE];
 
         StringBuilder buff = new StringBuilder();
         String letter = "";
@@ -128,17 +128,17 @@ public class TestNGramTreeNodeSingleNodeDecoding {
         NGramTreeNodeFileHandler serializationFactory = new NGramTreeNodeFileHandler();
 
         ArrayList<Pair<Integer, Integer>> backreferences = new ArrayList<>();
-        String[] lookupTable = new String[serializationFactory.codec.MAX_BACKREFERENCE];
+        String[] lookupTable = new String[serializationFactory.codec.BACKREFERENCE_ARRAY_SIZE];
 
         ArrayList<Byte> buff = new ArrayList<>();
         int parsed = 0;
 
         int currByte;
         while ((currByte = fr.read()) != -1) {
-            if (currByte >= serializationFactory.codec.BACKREFERENCE) {
+            if (currByte >= serializationFactory.codec.BACKREFERENCE_BYTE) {
                 parsed ++;
                 String word;
-                if (currByte == serializationFactory.codec.BACKREFERENCE) {
+                if (currByte == serializationFactory.codec.BACKREFERENCE_BYTE) {
                     int idx = fr.read() & 0xff;
                     word = lookupTable[idx];
                     currByte = fr.read();
