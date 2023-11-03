@@ -7,7 +7,10 @@
 The tree is flattened in a depth-first manner such that
 any given node will be laid to the 'left' of its children:
 
-![Diagram of a basic tree being flattened into an array of nodes](assets/tree_flattening.svg)
+<figure>
+  <img src="assets/tree_flattening.svg" alt="Diagram of a simple tree being flattened into an array of its nodes"/>
+  <figcaption>Figure 1: A visualization of the depth-first tree flattening process</figcaption>
+</figure>
 
 Laid below is pseudocode describing the flattening process.
 
